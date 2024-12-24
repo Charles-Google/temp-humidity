@@ -28,3 +28,12 @@ export async function setupRouter(app: App) {
   createRouterGuard(router);
   await router.isReady();
 }
+
+router.beforeEach((to, from, next) => {
+  // 取消权限检查逻辑
+  if (to.meta.requiresAuth && !authStore.isLogin) {
+    next('/login');
+  } else {
+    next();
+  }
+});

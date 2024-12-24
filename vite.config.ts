@@ -35,7 +35,14 @@ export default defineConfig(configEnv => {
       host: '0.0.0.0',
       port: 9527,
       open: true,
-      proxy: createViteProxy(viteEnv, enableProxy)
+      proxy: {
+        '/api': {
+          target: 'https://useradminfc-cndlionphb.cn-hangzhou.fcapp.run',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api/, '')
+        },
+        ...createViteProxy(viteEnv, enableProxy)
+      }
     },
     preview: {
       port: 9725

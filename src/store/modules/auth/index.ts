@@ -1,5 +1,5 @@
 import { computed, reactive, ref } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { defineStore } from 'pinia';
 import { useLoading } from '@sa/hooks';
 import { SetupStoreId } from '@/enum';
@@ -13,6 +13,7 @@ import { clearAuthStorage, getToken } from './shared';
 
 export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
   const route = useRoute();
+  const router = useRouter();
   const routeStore = useRouteStore();
   const tabStore = useTabStore();
   const { toLogin, redirectFromLogin } = useRouterPush(false);
@@ -63,23 +64,43 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
   async function login(userName: string, password: string, redirect = true) {
     startLoading();
 
-    const { data: loginToken, error } = await fetchLogin(userName, password);
+    try {
+      const { data } = await fetchLogin(userName, password);
+      
+      if (data.status === 1) {
+        const loginToken = {
+          token: data.data.Authorization,
+          refreshToken: data.data.Authorization
+        };
 
-    if (!error) {
-      const pass = await loginByToken(loginToken);
+        // 存储 token
+        token.value = loginToken.token;
+        localStg.set('token', loginToken.token);
 
-      if (pass) {
-        await redirectFromLogin(redirect);
+        // 打印 token 以便调试
+        console.log('Stored token:', token.value);
 
-        if (routeStore.isInitAuthRoute) {
-          window.$notification?.success({
-            title: $t('page.login.common.loginSuccess'),
-            content: $t('page.login.common.welcomeBack', { userName: userInfo.userName }),
-            duration: 4500
-          });
-        }
+        userInfo.userId = data.data.userId;
+        userInfo.roles = data.data.permissions || [];
+        userInfo.userName = userName;
+
+        await loginByToken(loginToken);
+
+        console.log('Login successful, redirecting to home...');
+        router.push('/home');
+
+        window.$notification?.success({
+          title: $t('page.login.common.loginSuccess'),
+          content: $t('page.login.common.welcomeBack', { userName: userInfo.userName }),
+          duration: 4500
+        });
+      } else {
+        window.$message?.error(data.message || '登录失败');
+        resetStore();
       }
-    } else {
+    } catch (error) {
+      console.error('登录失败:', error);
+      window.$message?.error('登录失败');
       resetStore();
     }
 
@@ -91,29 +112,29 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     localStg.set('token', loginToken.token);
     localStg.set('refreshToken', loginToken.refreshToken);
 
-    // 2. get user info
-    const pass = await getUserInfo();
+    // 由于我们已经在 login 函数中设置了用户信息，这里直接返回 true
+    token.value = loginToken.token;
+    return true;
 
-    if (pass) {
-      token.value = loginToken.token;
-
-      return true;
-    }
-
-    return false;
+    // 注释掉获取用户信息的部分，因为已经有了
+    // const pass = await getUserInfo();
+    // if (pass) {
+    //   token.value = loginToken.token;
+    //   return true;
+    // }
+    // return false;
   }
 
   async function getUserInfo() {
-    const { data: info, error } = await fetchGetUserInfo();
+    // 暂时直接返回 true
+    return true;
 
-    if (!error) {
-      // update store
-      Object.assign(userInfo, info);
-
-      return true;
-    }
-
-    return false;
+    // const { data: info, error } = await fetchGetUserInfo();
+    // if (!error) {
+    //   Object.assign(userInfo, info);
+    //   return true;
+    // }
+    // return false;
   }
 
   async function initUserInfo() {

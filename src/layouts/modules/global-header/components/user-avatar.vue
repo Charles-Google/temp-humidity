@@ -18,7 +18,7 @@ function loginOrRegister() {
   toLogin();
 }
 
-type DropdownKey = 'logout';
+type DropdownKey = 'logout' | 'deleteAccount';
 
 type DropdownOption =
   | {
@@ -37,6 +37,11 @@ const options = computed(() => {
       label: $t('common.logout'),
       key: 'logout',
       icon: SvgIconVNode({ icon: 'ph:sign-out', fontSize: 18 })
+    },
+    {
+      label: '注销账号',
+      key: 'deleteAccount',
+      icon: SvgIconVNode({ icon: 'ph:trash', fontSize: 18 })
     }
   ];
 
@@ -55,11 +60,55 @@ function logout() {
   });
 }
 
+function confirmDeleteAccount() {
+  window.$dialog?.info({
+    title: $t('common.tip'),
+    content: '确定要注销账号吗？',
+    positiveText: $t('common.confirm'),
+    negativeText: $t('common.cancel'),
+    onPositiveClick: async () => {
+      await deleteAccount();
+    }
+  });
+}
+
+async function deleteAccount() {
+  try {
+    const token = authStore.token;
+    if (!token) {
+      window.$message?.error('未能获取到有效的授权信息');
+      return;
+    }
+
+    console.log('Using token for delete:', token);
+
+    const response = await fetch('/api/delete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token
+      }
+    });
+
+    const data = await response.json();
+    if (data.status === 0) {
+      window.$message?.success('账号已注销');
+      authStore.resetStore();
+    } else {
+      window.$message?.error(data.message || '注销失败');
+    }
+  } catch (error) {
+    console.error('注销失败:', error);
+    window.$message?.error('注销失败');
+  }
+}
+
 function handleDropdown(key: DropdownKey) {
   if (key === 'logout') {
     logout();
+  } else if (key === 'deleteAccount') {
+    confirmDeleteAccount();
   } else {
-    // If your other options are jumps from other routes, they will be directly supported here
     routerPushByKey(key);
   }
 }

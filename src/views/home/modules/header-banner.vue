@@ -47,22 +47,22 @@ const goEmail = () => {
         <div class="flex-y-center">
           <SunLogo class="mr-3 h-18 w-18" />
           <div class="welcome-text">
-            <h1 class="text-2xl font-bold">欢迎回来, {{ authStore.userInfo.userName || '用户' }}</h1>
-            <p class="text-gray-500 text-lg">当前设备总数: {{ props.deviceTotal }}，正常运行中</p>
+            <h1 class="text-2xl font-bold">欢迎回来, {{ authStore.userInfo.userName || '用户' }}<el-tag type="primary" class="ml-2">{{ authStore.userInfo.roles[0] || '普通用户' }}</el-tag></h1>
+            <p class="text-gray-500 text-lg">当前设备总数: <span class="font-bold text-black">{{ props.deviceTotal }}</span>，正常运行中</p>
           </div>
         </div>
       </NGi>
       <NGi span="24 s:24 m:6">
         <NSpace :size="24" justify="end" align="center">
           <NStatistic v-for="item in statisticData" :key="item.id" class="whitespace-nowrap text-center" v-bind="item" />
-          <div class="message-count">
+          <!-- <div class="message-count">
             <div class="label">消息总数</div>
             <ElBadge :value="12" class="item">
               <ElTooltip content="报警信息" placement="bottom">
                 <ElButton @click="goEmail"><EmailLogo class="mx--3 h-8 w-8" /></ElButton>
               </ElTooltip>
             </ElBadge>
-          </div>
+          </div> -->
         </NSpace>
       </NGi>
     </NGrid>

@@ -1,25 +1,51 @@
 <script setup lang="ts">
 import HeaderBanner from './modules/header-banner.vue';
 import CollapseList from './modules/collapse-list.vue';
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 
-// 设备列表数据，从 CollapseList 组件提升到这里
-const deviceList = ref([
-  {
-    id: 1,
-    name: '温湿度设备',
-    type: 'null',
-    serialNumber: 'SNTAH',
-    password: '123456'
-  },
-  {
-    id: 2,
-    name: '温度设备',
-    type: '-',
-    serialNumber: 'SNTBH',
-    password: '654321'
+interface Device {
+  id: number;
+  name: string;
+  type: string;
+  serialNumber: string;
+  password: string;
+  temperatureThreshold?: number;
+  humidityThreshold?: number;
+  temperature: number[];
+  humidity: number[];
+}
+
+// 添加默认设备数据
+const defaultDevice: Device = {
+  id: 0,
+  name: '默认设备',
+  type: '未知',
+  serialNumber: 'SN0000',
+  password: '000000',
+  temperatureThreshold: 0,
+  humidityThreshold: 0,
+  temperature: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  humidity: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+};
+
+const deviceList = ref<Device[]>([defaultDevice]);
+
+// 获取设备数据
+const fetchDevices = async () => {
+  try {
+    const response = await fetch('/api/devices');
+    const data = await response.json();
+    if (data.code === 200) {
+      deviceList.value = data.data.devices;
+    }
+  } catch (error) {
+    console.error('获取设备数据失败:', error);
   }
-]);
+};
+
+onMounted(() => {
+  fetchDevices();
+});
 </script>
 
 <template>
