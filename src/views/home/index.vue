@@ -4,7 +4,7 @@ import CollapseList from './modules/collapse-list.vue';
 import { ref, onMounted } from 'vue';
 
 interface Device {
-  id: number;
+  id: string;
   name: string;
   type: string;
   serialNumber: string;
@@ -15,28 +15,26 @@ interface Device {
   humidity: number[];
 }
 
-// 添加默认设备数据
-const defaultDevice: Device = {
-  id: 0,
-  name: '默认设备',
-  type: '未知',
-  serialNumber: 'SN0000',
-  password: '000000',
-  temperatureThreshold: 0,
-  humidityThreshold: 0,
-  temperature: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  humidity: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-};
-
-const deviceList = ref<Device[]>([defaultDevice]);
+const deviceList = ref<Device[]>([]);
 
 // 获取设备数据
 const fetchDevices = async () => {
   try {
-    const response = await fetch('/api/devices');
+    const response = await fetch('/device/devices');
     const data = await response.json();
-    if (data.code === 200) {
-      deviceList.value = data.data.devices;
+    console.log('API Response:', data);
+    
+    if (data.status === 1) {
+      deviceList.value = data.data.map((device: any) => ({
+        id: Number(device.id),
+        name: device.name,
+        type: device.type,
+        serialNumber: device.sn,
+        password: device.passwd,
+        temperature: [], // 初始化温度数据
+        humidity: [] // 初始化湿度数据
+      }));
+      console.log('Processed device list:', deviceList.value);
     }
   } catch (error) {
     console.error('获取设备数据失败:', error);
@@ -50,8 +48,8 @@ onMounted(() => {
 
 <template>
   <div class="home-container">
-    <HeaderBanner :device-total="deviceList.length" />
-    <CollapseList :device-list="deviceList" />
+    <HeaderBanner :device-total="deviceList.length" @refreshDevices="fetchDevices" />
+    <CollapseList :device-list="deviceList" @refreshDevices="fetchDevices" />
   </div>
 </template>
 

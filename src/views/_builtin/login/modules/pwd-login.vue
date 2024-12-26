@@ -5,6 +5,7 @@ import { loginModuleRecord } from '@/constants/app';
 import { useRouterPush } from '@/hooks/common/router';
 import { useFormRules, useNaiveForm } from '@/hooks/common/form';
 import { useAuthStore } from '@/store/modules/auth';
+import { useRouter, useRoute } from 'vue-router';
 
 defineOptions({
   name: 'PwdLogin'
@@ -13,6 +14,8 @@ defineOptions({
 const authStore = useAuthStore();
 const { toggleLoginModule } = useRouterPush();
 const { formRef, validate } = useNaiveForm();
+const router = useRouter();
+const route = useRoute();
 
 interface FormModel {
   userName: string;
@@ -20,8 +23,8 @@ interface FormModel {
 }
 
 const model: FormModel = reactive({
-  userName: 'sssxxx',
-  password: '123456'
+  userName: '',
+  password: ''
 });
 
 const rules = computed<Record<keyof FormModel, App.Global.FormRule[]>>(() => {
@@ -36,7 +39,19 @@ const rules = computed<Record<keyof FormModel, App.Global.FormRule[]>>(() => {
 
 async function handleSubmit() {
   await validate();
-  await authStore.login(model.userName, model.password);
+  const success = await authStore.login(model.userName, model.password);
+  if (success) {
+    // 获取重定向地址
+    const redirect = route.query.redirect as string;
+    // 使用 router.replace 而不是 push
+    try {
+      await router.replace(redirect || '/home');
+    } catch (error) {
+      console.error('Navigation error:', error);
+      // 如果导航失败，尝试直接跳转到首页
+      await router.replace('/home');
+    }
+  }
 }
 
 type AccountKey = 'super' | 'admin' | 'user';
@@ -77,7 +92,11 @@ async function handleAccountLogin(account: Account) {
 <template>
   <NForm ref="formRef" :model="model" :rules="rules" size="large" :show-label="false" @keyup.enter="handleSubmit">
     <NFormItem path="userName">
-      <NInput v-model:value="model.userName" :placeholder="$t('page.login.common.userNamePlaceholder')" />
+      <NInput 
+        v-model:value="model.userName" 
+        :placeholder="$t('page.login.common.userNamePlaceholder')"
+        autocomplete="username" 
+      />
     </NFormItem>
     <NFormItem path="password">
       <NInput
@@ -85,12 +104,10 @@ async function handleAccountLogin(account: Account) {
         type="password"
         show-password-on="click"
         :placeholder="$t('page.login.common.passwordPlaceholder')"
+        autocomplete="current-password"
       />
     </NFormItem>
     <NSpace vertical :size="24">
-      <div class="flex-y-center justify-between">
-        <NCheckbox>{{ $t('page.login.pwdLogin.rememberMe') }}</NCheckbox>
-      </div>
       <NButton type="primary" size="large" round block :loading="authStore.loginLoading" @click="handleSubmit">
         {{ $t('common.confirm') }}
       </NButton>

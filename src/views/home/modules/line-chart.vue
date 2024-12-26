@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { watch } from 'vue';
+import { watch, ref, onMounted } from 'vue';
 import type { PropType } from 'vue';
 import { $t } from '@/locales';
 import { useAppStore } from '@/store/modules/app';
@@ -19,6 +19,14 @@ const props = defineProps({
   },
   humidityData: {
     type: Array as PropType<number[] | null>,
+    default: null
+  },
+  temperatureThreshold: {
+    type: Object as PropType<{ min: number, max: number }>,
+    default: null
+  },
+  humidityThreshold: {
+    type: Object as PropType<{ min: number, max: number }>,
     default: null
   }
 });
@@ -51,7 +59,7 @@ const { domRef: domRefLeft, updateOptions: updateOptionsLeft } = useEcharts(() =
   },
   yAxis: {
     type: 'value',
-    name: $t('page.home.downloadCount'),
+    name: '温度',
     axisLine: {
       show: true,
       lineStyle: {
@@ -62,7 +70,10 @@ const { domRef: domRefLeft, updateOptions: updateOptionsLeft } = useEcharts(() =
       show: true
     },
     markLine: {
-      data: [{ yAxis: 6000, lineStyle: { color: 'red', type: 'dashed' } }]
+      data: props.temperatureThreshold ? [
+        { yAxis: props.temperatureThreshold.min, lineStyle: { color: 'orange', type: 'dashed' } },
+        { yAxis: props.temperatureThreshold.max, lineStyle: { color: 'red', type: 'dashed' } }
+      ] : []
     }
   },
   series: [
@@ -119,7 +130,7 @@ const { domRef: domRefRight, updateOptions: updateOptionsRight } = useEcharts(()
   },
   yAxis: {
     type: 'value',
-    name: $t('page.home.registerCount'),
+    name: '湿度',
     axisLine: {
       show: true,
       lineStyle: {
@@ -130,7 +141,10 @@ const { domRef: domRefRight, updateOptions: updateOptionsRight } = useEcharts(()
       show: true
     },
     markLine: {
-      data: [{ yAxis: 8000, lineStyle: { color: 'red', type: 'dashed' } }]
+      data: props.humidityThreshold ? [
+        { yAxis: props.humidityThreshold.min, lineStyle: { color: 'orange', type: 'dashed' } },
+        { yAxis: props.humidityThreshold.max, lineStyle: { color: 'red', type: 'dashed' } }
+      ] : []
     }
   },
   series: [
@@ -160,7 +174,7 @@ const { domRef: domRefRight, updateOptions: updateOptionsRight } = useEcharts(()
 });
 
 watch(() => props.temperatureData, (newData) => {
-  console.log('Temperature data updated:', newData);
+  // console.log('Temperature data updated:', newData);
   updateOptionsLeft(opts => {
     opts.series[0].data = newData;
     return opts;
@@ -168,21 +182,81 @@ watch(() => props.temperatureData, (newData) => {
 }, { immediate: true });
 
 watch(() => props.humidityData, (newData) => {
-  console.log('Humidity data updated:', newData);
+  // console.log('Humidity data updated:', newData);
   updateOptionsRight(opts => {
     opts.series[0].data = newData;
     return opts;
   });
 }, { immediate: true });
+
+watch(() => props.temperatureThreshold, (newThreshold) => {
+  if (newThreshold) {
+    updateOptionsLeft(opts => {
+      opts.yAxis.markLine = {
+        data: [
+          { yAxis: newThreshold.min, lineStyle: { color: 'orange', type: 'dashed' } },
+          { yAxis: newThreshold.max, lineStyle: { color: 'red', type: 'dashed' } }
+        ]
+      };
+      return opts;
+    });
+  }
+}, { deep: true });
+
+watch(() => props.humidityThreshold, (newThreshold) => {
+  if (newThreshold) {
+    updateOptionsRight(opts => {
+      opts.yAxis.markLine = {
+        data: [
+          { yAxis: newThreshold.min, lineStyle: { color: 'orange', type: 'dashed' } },
+          { yAxis: newThreshold.max, lineStyle: { color: 'red', type: 'dashed' } }
+        ]
+      };
+      return opts;
+    });
+  }
+}, { deep: true });
+
+const loading = ref(true);
+
+onMounted(() => {
+  setTimeout(() => {
+    loading.value = false;
+  }, 500);
+});
 </script>
 
 <template>
-  <NCard :bordered="false" class="card-wrapper">
-    <div class="flex">
-      <!-- 左边的图表 -->
-      <div ref="domRefLeft" class="h-80 w-1/2 overflow-hidden"></div>
-      <!-- 右边的图表 -->
-      <div ref="domRefRight" class="h-80 w-1/2 overflow-hidden"></div>
-    </div>
-  </NCard>
+  <el-skeleton :loading="loading" animated>
+    <template #template>
+      <div class="chart-skeleton">
+        <div class="chart-body-skeleton">
+          <el-skeleton-item variant="p" style="height: 320px" />
+        </div>
+      </div>
+    </template>
+    <template #default>
+      <NCard :bordered="false" class="card-wrapper">
+        <div class="flex">
+          <div ref="domRefLeft" class="h-80 w-1/2 overflow-hidden"></div>
+          <div ref="domRefRight" class="h-80 w-1/2 overflow-hidden"></div>
+        </div>
+      </NCard>
+    </template>
+  </el-skeleton>
 </template>
+
+<style scoped>
+.chart-skeleton {
+  padding: 16px;
+}
+
+.chart-header-skeleton {
+  margin-bottom: 16px;
+}
+
+.chart-body-skeleton {
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+</style>

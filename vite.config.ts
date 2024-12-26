@@ -41,6 +41,16 @@ export default defineConfig(configEnv => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/api/, '')
         },
+        '/device': {
+          target: 'https://devicecontrolfc-axaainmcui.cn-hangzhou.fcapp.run',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/device/, '')
+        },
+        '/log': {
+          target: 'https://log-query-drumhrecjm.cn-hangzhou.fcapp.run',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/log/, '')
+        },
         ...createViteProxy(viteEnv, enableProxy)
       }
     },

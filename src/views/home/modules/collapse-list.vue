@@ -1,23 +1,20 @@
 <script setup lang="ts">
-import { ref, PropType } from 'vue';
-import { InfoFilled } from '@element-plus/icons-vue';
+import { ref, PropType, watch, nextTick } from 'vue';
+import { 
+  InfoFilled,
+  Sunny,          // 温度图标
+  Cloudy          // 湿度图标
+} from '@element-plus/icons-vue';
 import LineChart from './line-chart.vue';
-import { ElMessage, ElMessageBox } from 'element-plus'
-import HeaderBanner from './header-banner.vue';
+import { ElMessage } from 'element-plus';
+import LogTable from './log-table.vue';
 
-// 定义数据
-const temperatureData = [25.3, 26.1, 25.8, 26.4, 27.2, 26.8, 25.9, 25.4, 25.7, 26.2]; // 温度数据
-const humidityData = [45, 48, 52, 49, 47, 51, 53, 50, 48, 46]; // 湿度数据
-
-// 在 script setup 中修改 props 定义
 interface Device {
   id: number;
   name: string;
   type: string;
   serialNumber: string;
   password: string;
-  temperatureThreshold?: number;
-  humidityThreshold?: number;
   temperature: number[];
   humidity: number[];
 }
@@ -25,208 +22,693 @@ interface Device {
 const props = defineProps({
   deviceList: {
     type: Array as PropType<Device[]>,
-    required: true
+    required: true,
+    default: () => [] // 添加默认值
   }
 });
 
 // 当前活动面板
-const activePanel = ref<string | string[]>('1');
+const activePanel = ref<number | null>(null);
+const thresholds = ref<Record<number, { temperature: { min: number, max: number }, humidity: { min: number, max: number } }>>({});
 
-console.log('Download data:', temperatureData); // 添加日志
-console.log('Register data:', humidityData); // 添加日志
+// 添加设置阈值的对话框控制
+const thresholdDialogVisible = ref(false);
+const currentDeviceId = ref<number | null>(null);
+const thresholdForm = ref({
+  temperature: {
+    min: 0,
+    max: 100
+  },
+  humidity: {
+    min: 0,
+    max: 100
+  }
+});
 
-// 添加编辑表单的响应式数据
+// 添加编辑对话框控制
+const editDialogVisible = ref(false);
 const editForm = ref({
+  id: '',
   name: '',
   type: '',
   serialNumber: '',
-  password: '',
-  temperatureThreshold: undefined as number | undefined,
-  humidityThreshold: undefined as number | undefined
+  password: ''
 });
 
-// 控制对话框显示
-const dialogVisible = ref(false);
+// 添加 loading 状态控制
+const deletingIds = ref<Set<number>>(new Set());
 
-// 当前编辑的设备ID
-const currentEditId = ref<number | null>(null);
+// 添加视图切换控制
+const showChart = ref(true);
+const logTableRefs = ref(new Map());
 
-// 处理编辑按钮点击事件
-const handleEdit = (deviceId: number) => {
-  const device = props.deviceList.find(d => d.id === deviceId);
-  if (!device) return;
-  
-  // 设置当前编辑的设备数据（不包括温湿度数据）
-  currentEditId.value = deviceId;
-  editForm.value = {
-    name: device.name,
-    type: device.type,
-    serialNumber: device.serialNumber,
-    password: device.password,
-    temperatureThreshold: device.temperatureThreshold,
-    humidityThreshold: device.humidityThreshold
-  };
-  
-  dialogVisible.value = true;
+// 监听 deviceList 变化
+watch(() => props.deviceList, (newList) => {
+  console.log('Device list updated:', newList);
+}, { immediate: true });
+
+// 监听视图切换
+watch(showChart, async (newVal) => {
+  if (!newVal && activePanel.value !== null) {
+    // 切换到日志视图时，等待下一个 tick 后触发查询
+    await nextTick();
+    const logTableRef = logTableRefs.value.get(activePanel.value);
+    if (logTableRef) {
+      logTableRef.setDefaultTimeRange();
+    }
+  }
+});
+
+// 监听 activePanel 的变化
+watch(activePanel, async (newVal, oldVal) => {
+  if (newVal !== null) {
+    await fetchThresholds(newVal);
+    // 如果当前是日志视图，需要触发日志查询
+    if (!showChart.value) {
+      await nextTick();
+      const logTableRef = logTableRefs.value.get(newVal);
+      if (logTableRef) {
+        logTableRef.fetchLogs();
+      }
+    }
+    // 使用 setTimeout 等待面板完全展开
+    setTimeout(() => {
+      // 直接使用 CSS 选择器查找当前激活的面板
+      const panel = document.querySelector(`.el-collapse-item[data-name="${newVal}"]`);
+      if (panel) {
+        // 计算滚动位置
+        const headerHeight = 60;
+        const windowHeight = window.innerHeight;
+        const panelTop = panel.getBoundingClientRect().top;
+        const scrollTop = window.pageYOffset;
+        
+        // 计算理想的滚动位置（将面板放在视窗上方 20% 的位置）
+        const targetScroll = scrollTop + panelTop - (windowHeight * 0.2);
+        
+        window.scrollTo({
+          top: targetScroll,
+          behavior: 'smooth'
+        });
+      }
+    }, 300);
+  }
+});
+
+// 获取阈值
+const fetchThresholds = async (deviceId: number) => {
+  try {
+    console.log(`Fetching thresholds for device ID: ${deviceId}`);
+    // 初始化为"未设置"状态
+    if (!thresholds.value[deviceId]) {
+      thresholds.value[deviceId] = {
+        temperature: null,
+        humidity: null
+      };
+    }
+
+    const response = await fetch('/device/thresholds', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ device_id: String(deviceId) })
+    });
+
+    const data = await response.json();
+    console.log('Thresholds response:', data);
+
+    if (data.status === 1 && data.data) {
+      thresholds.value[deviceId] = {
+        temperature: data.data?.temperature_threshold || null,
+        humidity: data.data?.humidity_threshold || null
+      };
+    }
+  } catch (error) {
+    console.error('获取阈值失败:', error);
+  }
 };
 
-// 确认修改
-const handleConfirm = async () => {
-  if (currentEditId.value === null) return;
+// 打开设置阈值对话框
+const openThresholdDialog = (deviceId: number) => {
+  currentDeviceId.value = deviceId;
+  if (thresholds.value[deviceId]) {
+    thresholdForm.value = JSON.parse(JSON.stringify(thresholds.value[deviceId]));
+  }
+  thresholdDialogVisible.value = true;
+};
 
+// 设置阈值
+const setThresholds = async () => {
+  if (!currentDeviceId.value) return;
+  
   try {
-    const response = await fetch('/manage', {
+    console.log('Setting thresholds:', {
+      device_id: currentDeviceId.value,
+      thresholds: thresholdForm.value
+    });
+
+    const response = await fetch('/device/thresholds', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        id: currentEditId.value,
-        ...editForm.value
+        device_id: String(currentDeviceId.value),
+        temperature_threshold: {
+          min: thresholdForm.value.temperature.min,
+          max: thresholdForm.value.temperature.max
+        },
+        humidity_threshold: {
+          min: thresholdForm.value.humidity.min,
+          max: thresholdForm.value.humidity.max
+        }
       })
     });
 
     const data = await response.json();
-    if (data.code === 200) {
-      const updatedDevice = data.data.device;
-      const index = props.deviceList.findIndex(d => d.id === updatedDevice.id);
-      if (index !== -1) {
-        props.deviceList[index] = updatedDevice;
-      }
+    console.log('Thresholds response:', data);
 
-      ElMessage({
-        type: 'success',
-        message: '设备信息已更新'
+    if (data.status === 1) {
+      ElMessage.success({
+        message: '阈值设置成功',
+        type: 'success'
       });
+      thresholds.value[currentDeviceId.value] = JSON.parse(JSON.stringify(thresholdForm.value));
+      thresholdDialogVisible.value = false;
     } else {
-      ElMessage({
-        type: 'error',
-        message: '更新失败'
-      });
+      ElMessage.error(data.message || '阈值设置失败');
     }
   } catch (error) {
-    console.error('更新设备信息失败:', error);
-    ElMessage({
-      type: 'error',
-      message: '更新失败'
-    });
+    console.error('设置阈值失败:', error);
+    ElMessage.error('设置阈值失败');
   }
-
-  dialogVisible.value = false;
 };
 
-// 取消修改
-const handleCancel = () => {
-  dialogVisible.value = false;
-  ElMessage({
-    type: 'info',
-    message: '取消修改'
-  });
+// 打开编辑对话框
+const handleEdit = (deviceId: number) => {
+  const device = props.deviceList.find(d => d.id === deviceId);
+  if (device) {
+    editForm.value = {
+      id: String(device.id),
+      name: device.name,
+      type: device.type,
+      serialNumber: device.serialNumber,
+      password: device.password
+    };
+    editDialogVisible.value = true;
+  }
+};
+
+// 更新设备信息
+const updateDevice = async () => {
+  try {
+    console.log('Updating device:', editForm.value);
+    const response = await fetch('/device/devices', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify([{
+        id: editForm.value.id,
+        name: editForm.value.name,
+        type: editForm.value.type,
+        sn: editForm.value.serialNumber,
+        passwd: editForm.value.password
+      }])
+    });
+
+    const data = await response.json();
+    console.log('Update response:', data);
+    
+    if (data.status === 1) {
+      ElMessage.success({
+        message: '设备更新成功',
+        type: 'success'
+      });
+      editDialogVisible.value = false;
+      await emit('refreshDevices');
+    } else {
+      ElMessage.error(data.message || '设备更新失败');
+    }
+  } catch (error) {
+    console.error('更新设备失败:', error);
+    ElMessage.error('更新设备失败');
+  }
+};
+
+// 修改删除设备的函数
+const handleDelete = async (deviceId: number) => {
+  try {
+    deletingIds.value.add(deviceId);  // 开始删除，添加到 loading 集合
+    console.log('Deleting device:', deviceId);
+    
+    const response = await fetch('/device/devices', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        ids: [String(deviceId)]
+      })
+    });
+
+    const data = await response.json();
+    console.log('Delete response:', data);
+    
+    if (data.status === 1) {
+      ElMessage.success({
+        message: '设备删除成功',
+        type: 'success'
+      });
+      emit('refreshDevices');
+    } else {
+      ElMessage.error(data.message || '设备删除失败');
+    }
+  } catch (error) {
+    console.error('删除设备失败:', error);
+    ElMessage.error('删除设备失败');
+  } finally {
+    deletingIds.value.delete(deviceId);  // 无论成功失败，都移除 loading 状态
+  }
+};
+
+// 修改 emit 定义
+const emit = defineEmits(['refreshDevices']);
+
+// 添加设置 ref 的方法
+const setLogTableRef = (deviceId: number, el: any) => {
+  if (el) {
+    logTableRefs.value.set(deviceId, el);
+  } else {
+    logTableRefs.value.delete(deviceId);
+  }
 };
 </script>
 
 <template>
   <NCard :bordered="false" class="card-wrapper">
     <div class="demo-collapse">
-      <div class="device-info flex justify-between items-center">
-        <span class="label text-center w-1/6">ID</span>
-        <span class="label text-center w-1/6">设备名称</span>
-        <span class="label text-center w-1/6">设备类型</span>
-        <span class="label text-center w-1/6">序列号</span>
-        <span class="label text-center w-1/6">密码</span>
-        <span class="label text-center w-1/6">温度阈值</span>
-        <span class="label text-center w-1/6">湿度阈值</span>
-        <span class="label text-center w-1/6">操作</span>
-        <div class="device-info-content w-5"></div>
-      </div>
-   
-      <ElCollapse v-model="activePanel" accordion>
-        <ElCollapseItem 
-          v-for="device in props.deviceList" 
-          :key="device.id" 
-          :name="String(device.id)"
-        >
-          <template #title>
-            <div class="device-info flex justify-between items-center w-100%">
-              <div class="value text-center w-1/6">{{ device.id }}</div>
-              <div class="value text-center w-1/6">{{ device.name }}</div>
-              <div class="value text-center w-1/6">{{ device.type }}</div>
-              <div class="value text-center w-1/6">{{ device.serialNumber }}</div>
-              <div class="value text-center w-1/6">{{ device.password }}</div>
-              <div class="value text-center w-1/6">{{ device.temperatureThreshold || '-' }}</div>
-              <div class="value text-center w-1/6">{{ device.humidityThreshold || '-' }}</div>
-              <div class="text-center w-1/6">
-                <ElButton type="primary" size="small" class="edit-btn" @click.stop="handleEdit(device.id)">编辑</ElButton>
-                <el-popconfirm title="确定要删除吗？" @click.stop>
-                  <template #reference>
-                    <ElButton type="danger" size="small" class="edit-btn" @click.stop>删除</ElButton>
-                  </template>
-                </el-popconfirm>
+      <el-skeleton :loading="!props.deviceList" animated>
+        <template #template>
+          <div class="device-skeleton">
+            <!-- 表头骨架 -->
+            <div class="device-header-skeleton">
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 20%" />
+            </div>
+            <!-- 设备列表骨架 -->
+            <div v-for="i in 3" :key="i" class="device-item-skeleton">
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <el-skeleton-item variant="text" style="width: 15%" />
+              <div style="width: 20%; display: flex; gap: 8px;">
+                <el-skeleton-item variant="button" style="width: 60px" />
+                <el-skeleton-item variant="button" style="width: 60px" />
+                <el-skeleton-item variant="button" style="width: 60px" />
               </div>
             </div>
-          </template>
-          <div>
-            <LineChart 
-              :temperature-data="device.temperature"
-              :humidity-data="device.humidity"
-            />
           </div>
-        </ElCollapseItem>
-      </ElCollapse>
+        </template>
+        <template #default>
+          <div class="device-info flex justify-between items-center mb-4">
+            <span class="label text-center w-1/6">ID</span>
+            <span class="label text-center w-1/6">设备名称</span>
+            <span class="label text-center w-1/6">设备类型</span>
+            <span class="label text-center w-1/6">序列号</span>
+            <span class="label text-center w-1/6">密码</span>
+            <span class="label text-center w-1.7/6">操作</span>
+          </div>
+          <ElCollapse v-if="props.deviceList" v-model="activePanel" accordion>
+            <ElCollapseItem 
+              v-for="device in props.deviceList" 
+              :key="device.id" 
+              :name="device.id"
+              :data-name="device.id"
+            >
+              <template #title>
+                <div class="device-info flex justify-between items-center w-100%">
+                  <div class="value text-center w-1/6">{{ device.id }}</div>
+                  <div class="value text-center w-1/6">{{ device.name }}</div>
+                  <div class="value text-center w-1/6">{{ device.type }}</div>
+                  <div class="value text-center w-1/6">{{ device.serialNumber }}</div>
+                  <div class="value text-center w-1/6">{{ device.password }}</div>
+                  <div class="text-center w-1.7/6">
+                    <ElButton type="primary" size="small" class="edit-btn" @click.stop="handleEdit(device.id)">编辑</ElButton>
+                    <ElButton type="warning" size="small" class="edit-btn" @click.stop="openThresholdDialog(device.id)">设置阈值</ElButton>
+                    <el-popconfirm 
+                      title="确定要删除该设备吗？" 
+                      @confirm="handleDelete(device.id)"
+                      confirm-button-text="确定"
+                      cancel-button-text="取消"
+                      @click.stop
+                    >
+                      <template #reference>
+                        <ElButton 
+                          type="danger" 
+                          size="small" 
+                          class="edit-btn" 
+                          @click.stop
+                          :loading="deletingIds.has(device.id)"
+                        >
+                          {{ deletingIds.has(device.id) ? '删除中' : '删除' }}
+                        </ElButton>
+                      </template>
+                    </el-popconfirm>
+                  </div>
+                </div>
+              </template>
+              <div>
+                <div class="threshold-info">
+                  
+                  <div class="threshold-cards">
+                    <!-- 温度阈值卡片 -->
+                    <el-card class="threshold-card temperature">
+                      <template #header>
+                        <div class="card-header">
+                          <el-icon class="header-icon">
+                            <Sunny />
+                          </el-icon>
+                          <span>温度阈值</span>
+                        </div>
+                      </template>
+                      <div class="threshold-values">
+                        <div class="min-value">
+                          <span class="label">最小值</span>
+                          <span class="value">{{ thresholds[device.id]?.temperature?.min !== undefined ? `${thresholds[device.id]?.temperature?.min}°C` : '未设置' }}</span>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="max-value">
+                          <span class="label">最大值</span>
+                          <span class="value">{{ thresholds[device.id]?.temperature?.max !== undefined ? `${thresholds[device.id]?.temperature?.max}°C` : '未设置' }}</span>
+                        </div>
+                      </div>
+                    </el-card>
+                    
+                    <!-- 湿度阈值卡片 -->
+                    <el-card class="threshold-card humidity">
+                      <template #header>
+                        <div class="card-header">
+                          <el-icon class="header-icon">
+                            <Cloudy />
+                          </el-icon>
+                          <span>湿度阈值</span>
+                        </div>
+                      </template>
+                      <div class="threshold-values">
+                        <div class="min-value">
+                          <span class="label">最小值</span>
+                          <span class="value">{{ thresholds[device.id]?.humidity?.min !== undefined ? `${thresholds[device.id]?.humidity?.min}%` : '未设置' }}</span>
+                        </div>
+                        <div class="divider"></div>
+                        <div class="max-value">
+                          <span class="label">最大值</span>
+                          <span class="value">{{ thresholds[device.id]?.humidity?.max !== undefined ? `${thresholds[device.id]?.humidity?.max}%` : '未设置' }}</span>
+                        </div>
+                      </div>
+                    </el-card>
+                  </div>
+                </div>
+                <div class="view-switch">
+                    <el-switch
+                      v-model="showChart"
+                      class="ml-2 custom-switch"
+                      style="--el-switch-on-color: #409EFF; --el-switch-off-color: #409EFF"
+                      active-text="图表视图"
+                      inactive-text="日志视图"
+                      inline-prompt
+                    />
+                  </div>
+                <div>
+                  <LineChart 
+                    v-if="showChart"
+                    :temperature-data="device.temperature"
+                    :humidity-data="device.humidity"
+                    :temperature-threshold="thresholds[device.id]?.temperature || undefined"
+                    :humidity-threshold="thresholds[device.id]?.humidity || undefined"
+                  />
+                  <LogTable
+                    v-else
+                    :ref="el => setLogTableRef(device.id, el)"
+                    :device-id="device.id"
+                    :is-visible="!showChart && activePanel === device.id"
+                  />
+                </div>
+              </div>
+            </ElCollapseItem>
+          </ElCollapse>
+          <div v-if="props.deviceList && props.deviceList.length === 0" class="text-center py-4">
+            暂无设备数据
+          </div>
+        </template>
+      </el-skeleton>
     </div>
   </NCard>
 
-  <!-- 添加编辑对话框 -->
+  <!-- 添加阈值设置对话框 -->
   <el-dialog
-    v-model="dialogVisible"
-    title="修改设备信息"
+    v-model="thresholdDialogVisible"
+    title="设置阈值"
     width="30rem"
+    @keyup.enter="setThresholds"
   >
-    <el-form :model="editForm" label-width="6rem">
-      <el-form-item label="设备名称">
-        <el-input v-model="editForm.name" placeholder="请输入设备名称" />
-      </el-form-item>
-      <el-form-item label="设备类型">
-        <el-input v-model="editForm.type" placeholder="请输入设备类型" />
-      </el-form-item>
-      <el-form-item label="序列号">
-        <el-input v-model="editForm.serialNumber" placeholder="请输入序列号" />
-      </el-form-item>
-      <el-form-item label="密码">
-        <el-input v-model="editForm.password" placeholder="请输入密码" />
-      </el-form-item>
+    <el-form :model="thresholdForm" label-width="100px">
       <el-form-item label="温度阈值">
-        <el-input v-model.number="editForm.temperatureThreshold" type="number" placeholder="请输入温度阈值" />
+        <el-input-number v-model="thresholdForm.temperature.min" :min="-50" :max="100" class="mr-2" />
+        至
+        <el-input-number v-model="thresholdForm.temperature.max" :min="-50" :max="100" class="ml-2" />
       </el-form-item>
       <el-form-item label="湿度阈值">
-        <el-input v-model.number="editForm.humidityThreshold" type="number" placeholder="请输入湿度阈值" />
+        <el-input-number v-model="thresholdForm.humidity.min" :min="0" :max="100" class="mr-2" />
+        至
+        <el-input-number v-model="thresholdForm.humidity.max" :min="0" :max="100" class="ml-2" />
       </el-form-item>
     </el-form>
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="handleCancel">取消</el-button>
-        <el-button type="primary" @click="handleConfirm">确认</el-button>
+        <el-button @click="thresholdDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="setThresholds">确认</el-button>
+      </span>
+    </template>
+  </el-dialog>
+
+  <!-- 添加编辑设备对话框 -->
+  <el-dialog
+    v-model="editDialogVisible"
+    title="编辑设备"
+    width="30rem"
+    @keyup.enter="updateDevice"
+  
+  >
+    <el-form :model="editForm" label-width="100px" :rules="{
+      name: [{ required: true, message: '请输入设备名称', trigger: 'blur' }],
+      type: [{ required: true, message: '请输入设备类型', trigger: 'blur' }],
+      serialNumber: [{ required: true, message: '请输入序列号', trigger: 'blur' }],
+      password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+    }">
+      <el-form-item label="设备名称" prop="name">
+        <el-input v-model="editForm.name" placeholder="请输入设备名称" />
+      </el-form-item>
+      <el-form-item label="设备类型" prop="type">
+        <el-input v-model="editForm.type" placeholder="请输入设备类型" />
+      </el-form-item>
+      <el-form-item label="序列号" prop="serialNumber">
+        <el-input v-model="editForm.serialNumber" placeholder="请输入序列号" />
+      </el-form-item>
+      <el-form-item label="密码" prop="password">
+        <el-input v-model="editForm.password" placeholder="请输入密码" />
+      </el-form-item>
+    </el-form>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="editDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="updateDevice">确认</el-button>
       </span>
     </template>
   </el-dialog>
 </template>
 
 <style scoped>
-.edit-form {
-  padding: 20px;
+.card-wrapper {
+  margin: 16px;
 }
 
-.form-item {
-  margin-bottom: 20px;
+.device-info {
+  padding: 8px;
 }
 
-.form-item .label {
-  margin-bottom: 10px;
+.label {
+  font-weight: bold;
 }
 
-.dialog-footer {
+.value {
+  padding: 4px;
+}
+
+.threshold-info {
+  margin: 4px 0;
+  padding: 4px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+}
+
+.threshold-cards {
   display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.threshold-card {
+  flex: 1;
+  min-width: 240px;
+  transition: all 0.3s ease;
+  box-shadow: none !important;  /* 去掉阴影 */
+}
+
+.threshold-card:hover {
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 8px;
+}
+
+.threshold-values {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.min-value, .max-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background-color: #e0e0e0;
+  margin: 0 8px;
+}
+
+.threshold-values .label {
+  color: #666;
+  font-size: 14px;
+}
+
+.threshold-values .value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.edit-btn {
+  margin: 0 4px;
+}
+
+:deep(.el-card__header) {
+  padding: 4px 8px;
+}
+
+:deep(.el-card__body) {
+  padding: 4px 8px;
+}
+
+.header-icon {
+  font-size: 16px;
+}
+
+.temperature .header-icon,
+.temperature .value {
+  color: #ff9800;  /* 温暖的橙色 */
+}
+
+.humidity .header-icon,
+.humidity .value {
+  color: #2196f3;  /* 清爽的蓝色 */
+}
+
+/* 去掉 el-card 的默认阴影 */
+:deep(.el-card) {
+  box-shadow: none !important;
+  border: 1px solid #e4e7ed;
+}
+
+/* 添加未设置状态的样式 */
+.threshold-values .value.unset {
+  color: #909399;
+  font-style: italic;
+}
+
+.view-switch {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 10px;
+  padding: 8px;
+}
+
+.switch-label {
+  margin-right: 8px;
+  color: #606266;
+  font-size: 14px;
+}
+
+.custom-switch {
+  --el-switch-core-width: 80px !important;  /* 增加开关宽度 */
+  --el-switch-core-height: 28px !important; /* 增加开关高度 */
+  transform: scale(1.1);  /* 整体放大1.1倍 */
+}
+
+/* 调整文字大小和位置 */
+:deep(.custom-switch .el-switch__label) {
+  font-size: 13px;
+  line-height: 28px;
+}
+
+/* 设备列表骨架屏样式 */
+.device-skeleton {
+  padding: 16px;
+}
+
+.device-header-skeleton {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 8px;
+  margin-bottom: 16px;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+}
+
+.device-item-skeleton {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 8px;
+  margin-bottom: 8px;
+  background-color: #fff;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+}
+
+:deep(.el-skeleton__text) {
+  height: 16px !important;
+}
+
+:deep(.el-skeleton__button) {
+  height: 32px !important;
 }
 </style>

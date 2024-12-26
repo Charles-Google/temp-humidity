@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { NConfigProvider, darkTheme } from 'naive-ui';
 import type { WatermarkProps } from 'naive-ui';
 import { useAppStore } from './store/modules/app';
 import { useThemeStore } from './store/modules/theme';
+import { useAuthStore } from './store/modules/auth';
 import { naiveDateLocales, naiveLocales } from './locales/naive';
+import { localStg } from '@/utils/storage';
 
 defineOptions({
   name: 'App'
@@ -12,6 +14,25 @@ defineOptions({
 
 const appStore = useAppStore();
 const themeStore = useThemeStore();
+const authStore = useAuthStore();
+
+// 自动登录函数
+const autoLogin = async () => {
+  const token = localStg.get('token');
+  const userInfo = localStg.get('userInfo');
+  
+  if (token && userInfo?.userName) {
+    try {
+      await authStore.login(userInfo.userName, '');
+    } catch (error) {
+      console.error('Auto login failed:', error);
+    }
+  }
+};
+
+onMounted(() => {
+  autoLogin();
+});
 
 const naiveDarkTheme = computed(() => (themeStore.darkMode ? darkTheme : undefined));
 
