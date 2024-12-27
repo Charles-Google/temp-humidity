@@ -118,13 +118,17 @@ watch(activePanel, async (newVal, oldVal) => {
 const fetchThresholds = async (deviceId: number) => {
   try {
     console.log(`Fetching thresholds for device ID: ${deviceId}`);
-    // 初始化为"未设置"状态
-    if (!thresholds.value[deviceId]) {
-      thresholds.value[deviceId] = {
-        temperature: null,
-        humidity: null
-      };
-    }
+    // 初始化为空对象而不是 null
+    thresholds.value[deviceId] = thresholds.value[deviceId] || {
+      temperature: {
+        min: undefined,
+        max: undefined
+      },
+      humidity: {
+        min: undefined,
+        max: undefined
+      }
+    };
 
     const response = await fetch('/device/thresholds', {
       method: 'POST',
@@ -139,8 +143,14 @@ const fetchThresholds = async (deviceId: number) => {
 
     if (data.status === 1 && data.data) {
       thresholds.value[deviceId] = {
-        temperature: data.data?.temperature_threshold || null,
-        humidity: data.data?.humidity_threshold || null
+        temperature: data.data?.temperature_threshold || {
+          min: undefined,
+          max: undefined
+        },
+        humidity: data.data?.humidity_threshold || {
+          min: undefined,
+          max: undefined
+        }
       };
     }
   } catch (error) {
