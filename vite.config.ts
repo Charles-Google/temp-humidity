@@ -46,6 +46,11 @@ export default defineConfig(configEnv => {
           changeOrigin: true,
           rewrite: (path) => path.replace(/^\/device/, '')
         },
+        '/biz': {
+          target: 'https://bizfc-jcjdjdgjus.cn-hangzhou.fcapp.run',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/biz/, '')
+        },
         '/log': {
           target: 'https://log-query-drumhrecjm.cn-hangzhou.fcapp.run',
           changeOrigin: true,

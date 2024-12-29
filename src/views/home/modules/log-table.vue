@@ -34,11 +34,7 @@
               {{ formatDateTime(row.timestamp) }}
             </template>
           </el-table-column>
-          <el-table-column label="设备编号" width="140" fixed>
-            <template #default="{ row }">
-              {{ extractDeviceId(row.message) }}
-            </template>
-          </el-table-column>
+          
           <el-table-column prop="log_level" label="级别" width="80" fixed>
             <template #default="{ row }">
               <el-tag
@@ -237,7 +233,7 @@ onMounted(() => {
 <style scoped>
 .log-table-container {
   padding: 16px;
-  background-color: white;
+  background-color: var(--el-bg-color);
   border-radius: 8px;
 }
 
@@ -260,18 +256,36 @@ onMounted(() => {
 }
 
 :deep(.el-table) {
-  --el-table-border-color: #e4e7ed;
-  --el-table-header-bg-color: #f5f7fa;
-  --el-table-row-hover-bg-color: #f5f7fa;
+  --el-table-border-color: var(--el-border-color);
+  --el-table-header-bg-color: var(--el-bg-color-overlay);
+  --el-table-row-hover-bg-color: var(--el-bg-color-overlay);
+  --el-table-tr-bg-color: var(--el-bg-color);
+  background-color: var(--el-bg-color) !important;
 }
 
 :deep(.el-table__row) {
-  transition: background-color 0.3s;
+  background-color: var(--el-bg-color) !important;
+}
+
+:deep(.el-table__cell) {
+  background-color: var(--el-bg-color) !important;
+  color: var(--el-text-color-primary);
+}
+
+:deep(.el-table__header-wrapper) {
+  th.el-table__cell {
+    background-color: var(--el-bg-color-overlay) !important;
+    color: var(--el-text-color-primary);
+  }
+}
+
+:deep(.el-table--enable-row-hover .el-table__body tr:hover > td.el-table__cell) {
+  background-color: var(--el-bg-color-overlay) !important;
 }
 
 .skeleton-wrapper {
   padding: 16px;
-  background-color: #fff;
+  background-color: var(--el-bg-color);
   border-radius: 8px;
 }
 
@@ -285,12 +299,12 @@ onMounted(() => {
 }
 
 :deep(.el-table__body-wrapper::-webkit-scrollbar-thumb) {
-  background: #dcdfe6;
+  background: var(--el-border-color-darker);
   border-radius: 3px;
 }
 
 :deep(.el-table__body-wrapper::-webkit-scrollbar-track) {
-  background: #f5f7fa;
+  background: var(--el-bg-color-overlay);
 }
 
 .message-pre {
@@ -299,12 +313,14 @@ onMounted(() => {
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
+  color: var(--el-text-color-primary);
 }
 
 :deep(.el-table .cell) {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  color: var(--el-text-color-primary);
 }
 
 .message-content,

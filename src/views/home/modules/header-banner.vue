@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { $t } from '@/locales';
 import { useAppStore } from '@/store/modules/app';
 import { useAuthStore } from '@/store/modules/auth';
 import SunLogo from '@/components/common/sun-logo.vue';
 import { ElMessage } from 'element-plus';
+import { localStg } from '@/utils/storage';
 
 defineOptions({
   name: 'HeaderBanner'
@@ -12,6 +13,11 @@ defineOptions({
 
 const appStore = useAppStore();
 const authStore = useAuthStore();
+
+// 获取用户名
+const userName = computed(() => {
+  return localStg.get('userName') || '用户';
+});
 
 const gap = computed(() => (appStore.isMobile ? 0 : 16));
 
@@ -49,6 +55,9 @@ const newDeviceForm = ref({
   password: ''
 });
 
+// 添加权限检查
+const isAdmin = computed(() => authStore.userInfo.userName?.toLowerCase() === 'admin');
+
 // 显示对话框的函数
 const showAddDeviceDialog = () => {
   dialogVisible.value = true;
@@ -56,6 +65,11 @@ const showAddDeviceDialog = () => {
 
 // 新增设备的函数
 const addDevice = async () => {
+  if (!isAdmin.value) {
+    ElMessage.error('权限不足，请联系管理员');
+    return;
+  }
+
   if (!(await validateForm())) return;
 
   try {
@@ -100,7 +114,7 @@ const validateForm = async () => {
         <div class="flex-y-center">
           <SunLogo class="mr-3 h-18 w-18" />
           <div class="welcome-text">
-            <h1 class="text-2xl font-bold">欢迎回来, {{ authStore.userInfo.userName || '用户' }}</h1>
+            <h1 class="text-2xl font-bold">欢迎回来, {{ userName }}</h1>
             <p class="text-gray-500 text-lg">当前设备总数: <span class="font-bold text-black">{{ props.deviceTotal }}</span>，正常运行中</p>
           </div>
         </div>

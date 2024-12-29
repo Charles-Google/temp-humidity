@@ -29,7 +29,7 @@ const props = defineProps({
 
 // 当前活动面板
 const activePanel = ref<number | null>(null);
-const thresholds = ref<Record<number, { temperature: { min: number, max: number }, humidity: { min: number, max: number } }>>({});
+const thresholds = ref({});
 
 // 添加设置阈值的对话框控制
 const thresholdDialogVisible = ref(false);
@@ -115,41 +115,31 @@ watch(activePanel, async (newVal, oldVal) => {
 });
 
 // 获取阈值
-const fetchThresholds = async (deviceId: number) => {
+const fetchThresholds = async (deviceId) => {
   try {
-    console.log(`Fetching thresholds for device ID: ${deviceId}`);
-    // 初始化为空对象而不是 null
-    thresholds.value[deviceId] = thresholds.value[deviceId] || {
-      temperature: {
-        min: undefined,
-        max: undefined
-      },
-      humidity: {
-        min: undefined,
-        max: undefined
-      }
-    };
-
-    const response = await fetch('/device/thresholds', {
+    const response = await fetch('/biz/getthresholds', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ device_id: String(deviceId) })
+      body: JSON.stringify({
+        device_id: deviceId
+      })
     });
 
     const data = await response.json();
-    console.log('Thresholds response:', data);
-
+    console.log('获取阈值数据:', data);
+    
     if (data.status === 1 && data.data) {
+      // 转换数据格式以匹配line-chart组件的需求
       thresholds.value[deviceId] = {
-        temperature: data.data?.temperature_threshold || {
-          min: undefined,
-          max: undefined
+        temperature: {
+          min: data.data.temperature_threshold.min,
+          max: data.data.temperature_threshold.max
         },
-        humidity: data.data?.humidity_threshold || {
-          min: undefined,
-          max: undefined
+        humidity: {
+          min: data.data.humidity_threshold.min,
+          max: data.data.humidity_threshold.max
         }
       };
     }
@@ -347,7 +337,6 @@ const setLogTableRef = (deviceId: number, el: any) => {
         </template>
         <template #default>
           <div class="device-info flex justify-between items-center mb-4">
-            <span class="label text-center w-1/6">ID</span>
             <span class="label text-center w-1/6">设备名称</span>
             <span class="label text-center w-1/6">设备类型</span>
             <span class="label text-center w-1/6">序列号</span>
@@ -363,7 +352,6 @@ const setLogTableRef = (deviceId: number, el: any) => {
             >
               <template #title>
                 <div class="device-info flex justify-between items-center w-100%">
-                  <div class="value text-center w-1/6">{{ device.id }}</div>
                   <div class="value text-center w-1/6">{{ device.name }}</div>
                   <div class="value text-center w-1/6">{{ device.type }}</div>
                   <div class="value text-center w-1/6">{{ device.serialNumber }}</div>
@@ -457,10 +445,9 @@ const setLogTableRef = (deviceId: number, el: any) => {
                 <div>
                   <LineChart 
                     v-if="showChart"
-                    :temperature-data="device.temperature"
-                    :humidity-data="device.humidity"
-                    :temperature-threshold="thresholds[device.id]?.temperature || undefined"
-                    :humidity-threshold="thresholds[device.id]?.humidity || undefined"
+                    :device-id="String(device.id)"
+                    :is-visible="showChart && activePanel === device.id"
+                    :thresholds="thresholds[device.id]"
                   />
                   <LogTable
                     v-else
@@ -563,7 +550,7 @@ const setLogTableRef = (deviceId: number, el: any) => {
 .threshold-info {
   margin: 4px 0;
   padding: 4px;
-  background-color: #f8f9fa;
+  background-color: var(--el-bg-color);
   border-radius: 8px;
 }
 
@@ -577,7 +564,9 @@ const setLogTableRef = (deviceId: number, el: any) => {
   flex: 1;
   min-width: 240px;
   transition: all 0.3s ease;
-  box-shadow: none !important;  /* 去掉阴影 */
+  box-shadow: none !important;
+  background-color: var(--el-bg-color-overlay) !important;
+  border-color: var(--el-border-color) !important;
 }
 
 .threshold-card:hover {
@@ -591,6 +580,7 @@ const setLogTableRef = (deviceId: number, el: any) => {
   font-size: 14px;
   font-weight: 500;
   padding: 4px 8px;
+  color: var(--el-text-color-primary);
 }
 
 .threshold-values {
@@ -611,19 +601,19 @@ const setLogTableRef = (deviceId: number, el: any) => {
 .divider {
   width: 1px;
   height: 24px;
-  background-color: #e0e0e0;
+  background-color: var(--el-border-color);
   margin: 0 8px;
 }
 
 .threshold-values .label {
-  color: #666;
+  color: var(--el-text-color-secondary);
   font-size: 14px;
 }
 
 .threshold-values .value {
   font-size: 16px;
   font-weight: 600;
-  color: #333;
+  color: var(--el-text-color-primary);
 }
 
 .edit-btn {
@@ -655,12 +645,13 @@ const setLogTableRef = (deviceId: number, el: any) => {
 /* 去掉 el-card 的默认阴影 */
 :deep(.el-card) {
   box-shadow: none !important;
-  border: 1px solid #e4e7ed;
+  border: 1px solid var(--el-border-color);
+  background-color: var(--el-bg-color-overlay) !important;
 }
 
 /* 添加未设置状态的样式 */
 .threshold-values .value.unset {
-  color: #909399;
+  color: var(--el-text-color-disabled);
   font-style: italic;
 }
 
