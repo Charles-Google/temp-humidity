@@ -22,6 +22,8 @@ declare namespace StorageType {
     themeColor: string;
     /** The theme settings */
     themeSettings: App.Theme.ThemeSetting;
+    /** The stored user name */
+    storedUserName: string;
     /**
      * The override theme flags
      *

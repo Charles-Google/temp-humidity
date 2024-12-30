@@ -59,6 +59,16 @@ declare namespace Api {
       refreshToken: string;
     }
 
+    interface LoginResponse {
+      status: number;
+      message?: string;
+      data: {
+        Authorization: string;
+        userId: string;
+        permissions?: string[];
+      };
+    }
+
     interface UserInfo {
       userId: string;
       userName: string;

@@ -11,6 +11,16 @@ import { useRouteStore } from '../route';
 import { useTabStore } from '../tab';
 import { clearAuthStorage, getToken } from './shared';
 
+interface LoginResponse {
+  status: number;
+  message?: string;
+  data: {
+    Authorization: string;
+    userId: string;
+    permissions?: string[];
+  };
+}
+
 export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
   const route = useRoute();
   const router = useRouter();
@@ -43,6 +53,13 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     const authStore = useAuthStore();
 
     clearAuthStorage();
+    // 清除存储的用户名
+    localStg.remove('storedUserName');
+    // 重置用户信息
+    userInfo.userName = '';
+    userInfo.userId = '';
+    userInfo.roles = [];
+    userInfo.buttons = [];
 
     authStore.$reset();
 
@@ -65,7 +82,8 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     startLoading();
 
     try {
-      const { data } = await fetchLogin(userName, password);
+      const response = await fetchLogin(userName, password);
+      const data = response.data as Api.Auth.LoginResponse;
       
       if (data.status === 1) {
         const loginToken = {
@@ -77,12 +95,13 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
         token.value = loginToken.token;
         localStg.set('token', loginToken.token);
 
-        // 打印 token 以便调试
-        console.log('Stored token:', token.value);
-
+        // 存储用户信息
         userInfo.userId = data.data.userId;
         userInfo.roles = data.data.permissions || [];
         userInfo.userName = userName;
+        
+        // 存储用户名到 localStorage
+        localStg.set('storedUserName', userName);
 
         await loginByToken(loginToken);
 
@@ -139,8 +158,14 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
 
   async function initUserInfo() {
     const hasToken = getToken();
+    const storedUserName = localStg.get('storedUserName') as string | undefined;
 
     if (hasToken) {
+      // 如果有存储的用户名，恢复到 store 中
+      if (storedUserName) {
+        userInfo.userName = storedUserName;
+      }
+
       const pass = await getUserInfo();
 
       if (!pass) {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue';
+import { computed, ref, onMounted, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { $t } from '@/locales';
 import { useAppStore } from '@/store/modules/app';
 import { useAuthStore } from '@/store/modules/auth';
@@ -11,12 +12,36 @@ defineOptions({
   name: 'HeaderBanner'
 });
 
+const router = useRouter();
 const appStore = useAppStore();
 const authStore = useAuthStore();
 
 // 获取用户名
 const userName = computed(() => {
-  return localStg.get('userName') || '用户';
+  const storedUserName = localStg.get('storedUserName') as string | undefined;
+  return authStore.userInfo.userName || storedUserName || '用户';
+});
+
+// 检查用户登录状态
+const checkLoginStatus = () => {
+  const storedUserName = localStg.get('storedUserName') as string | undefined;
+  if (!authStore.isLogin || !storedUserName || storedUserName === '用户' || userName.value === '用户') {
+    ElMessage.warning('请在登录后查看');
+    router.push('/login');
+  }
+};
+
+onMounted(async () => {
+  // 初始化用户信息
+  await authStore.initUserInfo();
+  checkLoginStatus();
+});
+
+// 添加 watch 以监听登录状态变化
+watch(() => authStore.isLogin, (newVal) => {
+  if (!newVal) {
+    checkLoginStatus();
+  }
 });
 
 const gap = computed(() => (appStore.isMobile ? 0 : 16));
