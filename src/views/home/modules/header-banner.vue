@@ -23,24 +23,33 @@ const userName = computed(() => {
 });
 
 // 检查用户登录状态
-const checkLoginStatus = () => {
+const checkLoginStatus = async () => {
   const storedUserName = localStg.get('storedUserName') as string | undefined;
   if (!authStore.isLogin || !storedUserName || storedUserName === '用户' || userName.value === '用户') {
     ElMessage.warning('请在登录后查看');
-    router.push('/login');
+    try {
+      await router.push('/login');
+    } catch (error) {
+      console.error('路由跳转失败:', error);
+    }
+    return false;
   }
+  return true;
 };
 
 onMounted(async () => {
   // 初始化用户信息
   await authStore.initUserInfo();
-  checkLoginStatus();
+  const loginStatus = await checkLoginStatus();
+  if (!loginStatus) {
+    return; // 如果登录检查失败，直接返回，不执行后续逻辑
+  }
 });
 
 // 添加 watch 以监听登录状态变化
-watch(() => authStore.isLogin, (newVal) => {
+watch(() => authStore.isLogin, async (newVal) => {
   if (!newVal) {
-    checkLoginStatus();
+    await checkLoginStatus();
   }
 });
 

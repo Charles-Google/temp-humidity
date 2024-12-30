@@ -64,7 +64,11 @@ export const useAuthStore = defineStore(SetupStoreId.Auth, () => {
     authStore.$reset();
 
     if (!route.meta.constant) {
-      await toLogin();
+      try {
+        await router.push('/login');
+      } catch (error) {
+        console.error('路由跳转失败:', error);
+      }
     }
 
     tabStore.cacheTabs();
