@@ -156,6 +156,10 @@ const fetchThresholds = async (deviceId) => {
 
 // 打开设置阈值对话框
 const openThresholdDialog = (deviceId: number) => {
+  if (!isAdmin.value) {
+    ElMessage.error('权限不足，请联系管理员');
+    return;
+  }
   currentDeviceId.value = deviceId;
   if (thresholds.value[deviceId]) {
     thresholdForm.value = JSON.parse(JSON.stringify(thresholds.value[deviceId]));
@@ -212,6 +216,10 @@ const setThresholds = async () => {
 
 // 打开编辑对话框
 const handleEdit = (deviceId: number) => {
+  if (!isAdmin.value) {
+    ElMessage.error('权限不足，请联系管理员');
+    return;
+  }
   const device = props.deviceList.find(d => d.id === deviceId);
   if (device) {
     editForm.value = {
@@ -264,6 +272,10 @@ const updateDevice = async () => {
 
 // 修改删除设备的函数
 const handleDelete = async (deviceId: number) => {
+  if (!isAdmin.value) {
+    ElMessage.error('权限不足，请联系管理员');
+    return;
+  }
   try {
     deletingIds.value.add(deviceId);  // 开始删除，添加到 loading 集合
     console.log('Deleting device:', deviceId);
