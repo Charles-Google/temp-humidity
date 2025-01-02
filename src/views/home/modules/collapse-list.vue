@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, PropType, watch, nextTick } from 'vue';
+import { ref, PropType, watch, nextTick, computed } from 'vue';
 import { 
   InfoFilled,
   Sunny,          // 温度图标
@@ -8,6 +8,7 @@ import {
 import LineChart from './line-chart.vue';
 import { ElMessage } from 'element-plus';
 import LogTable from './log-table.vue';
+import { useAuthStore } from '@/store/modules/auth';
 
 interface Device {
   id: number;
@@ -26,6 +27,11 @@ const props = defineProps({
     default: () => [] // 添加默认值
   }
 });
+
+const authStore = useAuthStore();
+
+// 添加权限检查
+const isAdmin = computed(() => authStore.userInfo.userName?.toLowerCase() === 'admin');
 
 // 当前活动面板
 const activePanel = ref<number | null>(null);
