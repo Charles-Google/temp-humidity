@@ -425,7 +425,13 @@ const fetchDeviceData = async () => {
     }
 
     if (data.status === 1 && data.data && data.data.length > 0) {
-      const latestData = data.data.slice(-10);
+      // 对数据按时间排序（从新到旧）
+      const sortedData = data.data.sort((a, b) => 
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      
+      // 取最新的10条数据并反转，以便按时间顺序显示
+      const latestData = sortedData.slice(0, 10).reverse();
       const times = [];
       const temperatures = [];
       const humidities = [];
